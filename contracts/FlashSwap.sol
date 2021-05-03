@@ -40,7 +40,7 @@ contract FlashSwap is IUniswapV2Callee {
     // This function takes path (array of token addresses) as an argument - so it has to be initialized before
     // Path should contain addresses of FOUR tokens like:
     // addressA, addressB, addressC, addressA (loop)
-    function firstSwap(uint amount0, uint amount1, address[] memory path) external {
+    function startFlashSwap(uint amount0, uint amount1, address[] memory path) external {
         // In our case 'amount1' doesn't affect anything
         require(path.length >= 3, "FlashSwap: length of path has to be at least 3");
         //TODO: try to send this `path` to `data`. But how to convert an array to `bytes` type?
