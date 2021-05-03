@@ -5,7 +5,7 @@ pragma solidity ^0.6.0;
 import '@uniswap/v2-core/contracts/interfaces/IUniswapV2Callee.sol';
 
 import './libraries/UniswapV2Library.sol';
-import './IUniswapV2Factory.sol';
+import './uniswap/IUniswapV2Factory.sol';
 import './interfaces/IUniswapV2Router02.sol';
 import './interfaces/IERC20.sol';
 
