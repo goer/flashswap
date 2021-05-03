@@ -3,83 +3,85 @@ pragma solidity =0.6.6;
 import '@uniswap/v2-core/contracts/interfaces/IUniswapV2Callee.sol';
 
 import '../libraries/UniswapV2Library.sol';
-import '../IUniswapV2Factory.sol';
-import '../interfaces/V1/IUniswapV1Exchange.sol';
-import '../interfaces/IUniswapV2Router01.sol';
+import '../interfaces/IUniswapV2Factory.sol';
+import '../interfaces/IUniswapV2Router02.sol';
+import '../interfaces/IUniswapV2Pair.sol';
 import '../interfaces/IERC20.sol';
-import '../interfaces/IWETH.sol';
 
-contract ExampleFlashSwap is IUniswapV2Callee {
-    // IUniswapV1Factory immutable factoryV1;
+
+/*
+
+THE IDEA:
+
+There are three tokens: A, B, C
+Let's say that the current ratio between them is 1:10:100
+We swap 1A -> 10B
+After that for some reason (that we have no control of) the ratio between B and C changes to 9:100 (for example)
+We swap 10B -> 110C(!!!)
+We swap 110C -> 1.1A
+0.1A returns to us as a profit
+1A goes back to the pool
+
+*/
+
+
+contract FlashSwap is IUniswapV2Callee {
+    IUniswapV2Factory immutable factoryV2;
     address immutable _factory;
     address immutable _router;
-    address immutable WETH;
+    address immutable token0, token1;
     address[] private _path;
 
-    constructor(address factory, address router) public {
-        _factory = factory;
-        _router = router;
-        WETH = IUniswapV2Router02(IUniswapV2Factory).WETH();
+    constructor(address factoryAddr, address routerAddr) public {
+        _factoryAddr = factoryAddr;
+        _routerAddr = routerAddr;
     }
 
-    // needs to accept ETH from any V1 exchange and WETH. ideally this could be enforced, as in the router,
-    // but it's not possible because it requires a call to the v1 factory, which takes too much gas
-    // receive() external payable {}
-
-
-    function startFlashLoan(uint amount0, uint amount1, address[] memory path) external {
-        require(path.length >= 3, "ExampleFlashSwap: length of path has to be at least 3");
+    // This function takes path (array of token addresses) as an argument - so it has to be initialized before
+    // Path should contain addresses of FOUR tokens like:
+    // addressA, addressB, addressC, addressA (loop)
+    function firstSwap(uint amount0, uint amount1, address[] memory path) external {
+        // In our case 'amount1' doesn't affect anything
+        require(path.length >= 3, "FlashSwap: length of path has to be at least 3");
+        //TODO: try to send this `path` to `data`. But how to convert an array to `bytes` type?
         _path = path;
-        address pair = IUniswapV2Factory(_factory).getPair(path[0], WETH);
-        IUniswapV2Pair(XYI_WETH).swap(
+        address pair = IUniswapV2Factory(_factory).getPair(path[0], path[1]);
+        address token0 = IUniswapV2Pair(pair).token0();
+        require(token0 == path[0] && token0 == path[path.length - 1], "First and last tokens must be the same token0 of the first pair");
+        IUniswapV2Pair(pair).swap(
           amount0,
-          amount1,
+          0, // We swap all tokens0 and none of tokens1
           address(this),
-          bytes("any")
+          bytes("somestring") // Non-zero length of these bytes triggers uniswapV2Call below
         );
     }
-    // gets tokens/WETH via a V2 flash swap, swaps for the ETH/tokens on V1, repays V2, and keeps the rest!
+
+    // sender = msg.sender
+    // amount0 = amountIn
+    // amount1 = amountOut
     function uniswapV2Call(address sender, uint amount0, uint amount1, bytes calldata data) external override {
-        address[] memory path = new address[](2);
-        uint amountToken;
-        uint amountETH;
-        { // scope for token{0,1}, avoids stack too deep errors
+        // Do all necassary checks
         address token0 = IUniswapV2Pair(msg.sender).token0();
         address token1 = IUniswapV2Pair(msg.sender).token1();
-        assert(msg.sender == UniswapV2Library.pairFor(factory, token0, token1)); // ensure that msg.sender is actually a V2 pair
-        assert(amount0 == 0 || amount1 == 0); // this strategy is unidirectional
-        path[0] = amount0 == 0 ? token0 : token1;
-        path[1] = amount0 == 0 ? token1 : token0;
-        // amountToken = token0 == address(WETH) ? amount1 : amount0;
-        // amountETH = token0 == address(WETH) ? amount0 : amount1;
-        }
+        assert(msg.sender == UniswapV2Library.pairFor(_factory, token0, token1));
+        
+        // Approve transfer of ERC20 token via router
+        IERC20(token0).approve(_router, amount0);
+        // Router makes swaps for EACH(!) pair from the path
+        IUniswapV2Router02(_router).swapExactTokensForTokens(
+            amount0,
+            amount0, // WARNING! minimum amount that will return back has to be greater than start amount
+            _path,
+            msg.sender,
+            now + 10 minutes
+        );
 
-        assert(path[0] == address(WETH) || path[1] == address(WETH)); // this strategy only works with a V2 WETH pair
-
-        token.approve(address(uniswap_router), amountToken);
-        uniswap_router.swapExactTokensForTokens(amount_tokens_out, amount_tok_min_out, path, msg.sender, deadline);
-
-        // IERC20 token = IERC20(path[0] == address(WETH) ? path[1] : path[0]);
-        // IUniswapV1Exchange exchangeV1 = IUniswapV1Exchange(factoryV1.getExchange(address(token))); // get V1 exchange
-
-        // if (amountToken > 0) {
-        //     (uint minETH) = abi.decode(data, (uint)); // slippage parameter for V1, passed in by caller
-        //     token.approve(address(exchangeV1), amountToken);
-        //     uint amountReceived = exchangeV1.tokenToEthSwapInput(amountToken, minETH, uint(-1));
-        //     uint amountRequired = UniswapV2Library.getAmountsIn(factory, amountToken, path)[0];
-        //     assert(amountReceived > amountRequired); // fail if we didn't get enough ETH back to repay our flash loan
-        //     WETH.deposit{value: amountRequired}();
-        //     assert(WETH.transfer(msg.sender, amountRequired)); // return WETH to V2 pair
-        //     (bool success,) = sender.call{value: amountReceived - amountRequired}(new bytes(0)); // keep the rest! (ETH)
-        //     assert(success);
-        // } else {
-        //     (uint minTokens) = abi.decode(data, (uint)); // slippage parameter for V1, passed in by caller
-        //     WETH.withdraw(amountETH);
-        //     uint amountReceived = exchangeV1.ethToTokenSwapInput{value: amountETH}(minTokens, uint(-1));
-        //     uint amountRequired = UniswapV2Library.getAmountsIn(factory, amountETH, path)[0];
-        //     assert(amountReceived > amountRequired); // fail if we didn't get enough tokens back to repay our flash loan
-        //     assert(token.transfer(msg.sender, amountRequired)); // return tokens to V2 pair
-        //     assert(token.transfer(sender, amountReceived - amountRequired)); // keep the rest! (tokens)
-        // }
+        // At the very beginning we put amount0 tokens into the pool
+        // So after all swaps we get amount0 + some more tokens
+        // We return amount0 back to the pool
+        uint amountIn = UniswapV2Library.getAmountsIn(_factory, amount0, _path);
+        IERC20(token0).transfer(pair, amountIn);
+        // And send all profit to a sender
+        IERC20(token0).transfer(sender, IERC20(token0).balanceOf(address(this)));
     }
 }
