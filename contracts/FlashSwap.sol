@@ -1,11 +1,13 @@
+// SPDX-License-Identifier: MIT
 
-import '@uniswap/v2-core/contracts/interfaces/IUniswapV2Callee.sol';
+pragma solidity ^0.8.0;
 
-import '../libraries/UniswapV2Library.sol';
-import '../interfaces/IUniswapV2Factory.sol';
-import '../interfaces/IUniswapV2Router02.sol';
-import '../interfaces/IUniswapV2Pair.sol';
-import '../interfaces/IERC20.sol';
+import './libraries/UniswapV2Library.sol';
+import './interfaces/IUniswapV2Factory.sol';
+import './interfaces/IUniswapV2Router02.sol';
+import './interfaces/IUniswapV2Pair.sol';
+import './interfaces/IERC20.sol';
+import './interfaces/IUniswapV2Callee.sol';
 
 
 /*
@@ -28,7 +30,11 @@ contract FlashSwap is IUniswapV2Callee {
     IUniswapV2Factory immutable factoryV2;
     address immutable _factory;
     address immutable _router;
-    address immutable token0, token1;
+    address immutable token0;
+    address immutable token1;
+    address immutable _factoryAddr;
+    address immutable _routerAddr;
+    address private pair;
     address[] private _path;
 
     constructor(address factoryAddr, address routerAddr) public {
@@ -42,12 +48,11 @@ contract FlashSwap is IUniswapV2Callee {
     function startFlashSwap(uint amount0, uint amount1, address[] memory path) external {
         // In our case 'amount1' doesn't affect anything
         require(path.length >= 3, "FlashSwap: length of path has to be at least 3");
-        //TODO: try to send this `path` to `data`. But how to convert an array to `bytes` type?
         _path = path;
         // Get the pair address from the factory
-        address pair = IUniswapV2Factory(_factory).getPair(path[0], path[1]);
+        pair = IUniswapV2Factory(_factory).getPair(path[0], path[1]);
         // The first token of the pair
-        address token0 = IUniswapV2Pair(pair).token0();
+        token0 = IUniswapV2Pair(pair).token0();
         // First and last tokens of path must be the same
         require(token0 == path[0] && token0 == path[path.length - 1], "First and last tokens must be the same!");
         // Swap all tokens1
@@ -64,9 +69,12 @@ contract FlashSwap is IUniswapV2Callee {
     // amount1 = amountOut
     function uniswapV2Call(address sender, uint amount0, uint amount1, bytes calldata data) external override {
         // Do all necassary checks
-        address token0 = IUniswapV2Pair(msg.sender).token0();
-        address token1 = IUniswapV2Pair(msg.sender).token1();
+        token0 = IUniswapV2Pair(msg.sender).token0();
+        token1 = IUniswapV2Pair(msg.sender).token1();
         assert(msg.sender == UniswapV2Library.pairFor(_factory, token0, token1));
+
+        address rootToken = amount0 == 0 ? token1 : token0;
+        uint amount = amount0 == 0 ? amount1 : amount0;
         
         // Approve transfer of ERC20 token via router
         IERC20(token0).approve(_router, amount0);
@@ -76,13 +84,14 @@ contract FlashSwap is IUniswapV2Callee {
             amount0, // WARNING! minimum amount that will return back has to be greater than start amount (change that argument)
             _path,
             msg.sender,
-            now + 10 minutes
+            block.timestamp + 10 minutes
         );
 
         // At the very beginning we put amount0 tokens into the pool
         // So after all swaps we get amount0 + some more tokens
         // We return amount0 back to the pool
-        uint amountIn = UniswapV2Library.getAmountsIn(_factory, amount0, _path);
+       (uint112 reserve0, uint112 reserve1,) = IUniswapV2Pair(msg.sender).getReserves();
+        uint amountIn = UniswapV2Library.getAmountIn(amount, reserve0, reserve1);
         IERC20(token0).transfer(pair, amountIn);
         // And send all profit to a sender
         IERC20(token0).transfer(sender, IERC20(token0).balanceOf(address(this)));
