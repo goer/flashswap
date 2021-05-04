@@ -5,7 +5,7 @@ pragma solidity ^0.6.0;
 import '@uniswap/v2-core/contracts/interfaces/IUniswapV2Callee.sol';
 
 import './libraries/UniswapV2Library.sol';
-import './uniswap/IUniswapV2Factory.sol';
+import './interfaces/IUniswapV2Factory.sol';
 import './interfaces/IUniswapV2Router02.sol';
 import './interfaces/IERC20.sol';
 
@@ -41,18 +41,22 @@ contract FlashSwap is IUniswapV2Callee {
         address token1 = IUniswapV2Pair(msg.sender).token1();
         // Necassary to check that this msg.sender is a pair
         assert(msg.sender == UniswapV2Library.pairFor(_factory, token0, token1));
-        
+
+        address pair = IUniswapV2Factory(_factory).getPair(token0, token1);
+
         IERC20(token0).approve(_router, amount0);
         IUniswapV2Router02(_router).swapExactTokensForTokens(
             amount0,
-            amount0, // minimum amount that will return back has to be greater than start amount
+            amount0, // Amount that will return back has to be greater than start amount
             _path,
             msg.sender,
             now + 10 minutes
         );
 
-        uint amountIn = UniswapV2Library.getAmountsIn(_factory, amount0, _path);
-        IERC20(token0).transfer(pair, amountIn);
+        uint256[] memory amountIn = UniswapV2Library.getAmountsIn(_factory, amount0, _path);
+
+        //amountIn[0] is it right index?
+        IERC20(token0).transfer(pair, amountIn[0]);
         // Send all profit to a sender
         IERC20(token0).transfer(sender, IERC20(token0).balanceOf(address(this)));
     }
