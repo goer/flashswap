@@ -44,14 +44,18 @@ contract FlashSwap is IUniswapV2Callee {
         require(path.length >= 3, "FlashSwap: length of path has to be at least 3");
         //TODO: try to send this `path` to `data`. But how to convert an array to `bytes` type?
         _path = path;
+        // Get the pair address from the factory
         address pair = IUniswapV2Factory(_factory).getPair(path[0], path[1]);
+        // The first token of the pair
         address token0 = IUniswapV2Pair(pair).token0();
-        require(token0 == path[0] && token0 == path[path.length - 1], "First and last tokens must be the same token0 of the first pair");
+        // First and last tokens of path must be the same
+        require(token0 == path[0] && token0 == path[path.length - 1], "First and last tokens must be the same!");
+        // Swap all tokens1
         IUniswapV2Pair(pair).swap(
           amount0,
-          0, // We swap all tokens0 and none of tokens1
-          address(this),
-          bytes("somestring") // Non-zero length of these bytes triggers uniswapV2Call below
+          0, // Transaction shouldn't be reverted even if we remove zero tokens after the swap
+          address(this), // Recepient of tokens is the same contract that calls what function
+          bytes("somestring") // Non-zero length of these bytes triggers uniswapV2Call() below
         );
     }
 
@@ -69,7 +73,7 @@ contract FlashSwap is IUniswapV2Callee {
         // Router makes swaps for EACH(!) pair from the path
         IUniswapV2Router02(_router).swapExactTokensForTokens(
             amount0,
-            amount0, // WARNING! minimum amount that will return back has to be greater than start amount
+            amount0, // WARNING! minimum amount that will return back has to be greater than start amount (change that argument)
             _path,
             msg.sender,
             now + 10 minutes
