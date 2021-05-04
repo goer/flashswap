@@ -3,6 +3,7 @@
 pragma solidity ^0.6.0;
 
 import '@uniswap/v2-core/contracts/interfaces/IUniswapV2Callee.sol';
+import '@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol';
 
 import './libraries/UniswapV2Library.sol';
 import './interfaces/IUniswapV2Factory.sol';
@@ -20,17 +21,17 @@ contract FlashSwap is IUniswapV2Callee {
     }
 
     function startFlashLoan(uint amount0, uint amount1, address[] memory path) external {
-        // `amount1` doesn't affect anything
         require(path.length >= 3, "FlashSwap: length of path has to be at least 3");
-        //TODO: try to send this `path` to `data`. But how to convert an array to `bytes` type?
+
         _path = path;
         address pair = IUniswapV2Factory(_factory).getPair(path[0], path[1]);
-        address token0 = IUniswapV2Pair(pair).token0();
-        require(token0 == path[0] && token0 == path[path.length - 1], "First and last tokens must be the same token0 of the first pair");
+
+        // address token0 = IUniswapV2Pair(pair).token0();
+        // require(token0 == path[0] && token0 == path[path.length - 1], "First and last tokens must be the same token0 of the first pair");
+
         IUniswapV2Pair(pair).swap(
           amount0,
-          // We need get only one token
-          0, //amount1,
+          amount1,
           address(this),
           bytes("any") // random `data` to trigger flash-swap
         );
@@ -41,23 +42,26 @@ contract FlashSwap is IUniswapV2Callee {
         address token1 = IUniswapV2Pair(msg.sender).token1();
         // Necassary to check that this msg.sender is a pair
         assert(msg.sender == UniswapV2Library.pairFor(_factory, token0, token1));
+        assert(amount0 == 0 || amount1 == 0); // this strategy is unidirectional
+        address rootToken = amount0 == 0 ? token1 : token0;
+        uint amount = amount0 == 0 ? amount1 : amount0;
 
-        address pair = IUniswapV2Factory(_factory).getPair(token0, token1);
-
-        IERC20(token0).approve(_router, amount0);
+        IERC20(rootToken).approve(_router, amount);
         IUniswapV2Router02(_router).swapExactTokensForTokens(
-            amount0,
-            amount0, // Amount that will return back has to be greater than start amount
+            amount,
+            amount, // Amount that will return back has to be greater than start amount
             _path,
-            msg.sender,
+            address(this),
             now + 10 minutes
         );
 
-        uint256[] memory amountIn = UniswapV2Library.getAmountsIn(_factory, amount0, _path);
+        (uint112 reserve0, uint112 reserve1,) = IUniswapV2Pair(msg.sender).getReserves();
+        uint amountIn = UniswapV2Library.getAmountIn(amount, reserve0, reserve1);
+        // uint256[] memory amountIn = UniswapV2Library.getAmountsIn(_factory, amount, _path);
 
         //amountIn[0] is it right index?
-        IERC20(token0).transfer(pair, amountIn[0]);
+        IERC20(rootToken).transfer(msg.sender, amountIn);
         // Send all profit to a sender
-        IERC20(token0).transfer(sender, IERC20(token0).balanceOf(address(this)));
+        IERC20(rootToken).transfer(sender, IERC20(rootToken).balanceOf(address(this)));
     }
 }
