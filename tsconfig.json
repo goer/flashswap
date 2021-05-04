@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "es5",
+    "module": "commonjs",
+    "strict": true,
+    "esModuleInterop": true,
+    "outDir": "dist",
+    "resolveJsonModule": true,
+    "lib": [
+      "ES2020.Promise"
+    ]
+  },
+  "include": ["./scripts", "./test", "./app"],
+  "files": ["./hardhat.config.ts"]
+}
