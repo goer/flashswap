@@ -13,7 +13,9 @@
   "dependencies": {
     "@chainlink/contracts": "^0.1.6",
     "@ethersproject/abstract-provider": "^5.1.0",
+    "@ethersproject/constants": "^5.1.0",
     "@openzeppelin/contracts": "^3.4.1",
+    "fs": "*",
     "glob": "^7.1.6"
   },
   "devDependencies": {

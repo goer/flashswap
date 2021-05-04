@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.0;
 
+pragma solidity ^0.6.10;
 import './libraries/UniswapV2Library.sol';
 import './interfaces/IUniswapV2Factory.sol';
 import './interfaces/IUniswapV2Router02.sol';
@@ -27,15 +27,15 @@ We swap 110C -> 1.1A
 
 
 contract FlashSwap is IUniswapV2Callee {
-    IUniswapV2Factory immutable factoryV2;
-    address immutable _factory;
-    address immutable _router;
-    address immutable token0;
-    address immutable token1;
-    address immutable _factoryAddr;
-    address immutable _routerAddr;
-    address private pair;
-    address[] private _path;
+
+    address private  _factory;
+    address private  _router;
+    address private  token0;
+    address private  token1;
+    address private  _factoryAddr;
+    address private  _routerAddr;
+    address private  pair;
+    address[] private  _path;
 
     constructor(address factoryAddr, address routerAddr) public {
         _factoryAddr = factoryAddr;
@@ -45,7 +45,7 @@ contract FlashSwap is IUniswapV2Callee {
     // This function takes path (array of token addresses) as an argument - so it has to be initialized before
     // Path should contain addresses of FOUR tokens like:
     // addressA, addressB, addressC, addressA (loop)
-    function startFlashSwap(uint amount0, uint amount1, address[] memory path) external {
+    function startFlashSwap(uint amount0, uint amount1, address[] calldata path) external {
         // In our case 'amount1' doesn't affect anything
         require(path.length >= 3, "FlashSwap: length of path has to be at least 3");
         _path = path;
