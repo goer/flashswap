@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.6.0;
+pragma solidity ^0.6.6;
 
-import '@uniswap/v2-core/contracts/interfaces/IUniswapV2Callee.sol';
-import './interfaces/IUniswapV2Pair.sol';
 
-import './libraries/UniswapV2Library.sol';
+// All local imports 
 import './libraries/SafeMath.sol';
 import './interfaces/IUniswapV2Factory.sol';
 import './interfaces/IUniswapV2Router02.sol';
 import './interfaces/IUniswapV2Pair.sol';
 import './interfaces/IERC20.sol';
 import './interfaces/IUniswapV2Callee.sol';
+import './libraries/UniswapV2Library.sol';
 
 
 /*
@@ -33,10 +32,6 @@ We swap 110C -> 1.1A
 contract FlashSwap is IUniswapV2Callee {
     using SafeMath for uint;
 
-    address private immutable _factory;
-    address private immutable _router;
-    address[] private _path;
-
     address private  _factory;
     address private  _router;
     address private  token0;
@@ -51,7 +46,7 @@ contract FlashSwap is IUniswapV2Callee {
         _routerAddr = routerAddr;
     }
 
-    function startFlashLoan(uint amountIn, address[] memory path, address baseToken) external {
+    function startFlashLoan(uint amountIn, address[] calldata path, address baseToken) external {
         // `path` must not include `baseToken` address
         require(path.length >= 3, "FlashSwap: Length of this path has to be at least 3");
         require(path[0] == path[path.length - 1], "FlashSwap: First and last tokens must be the same token");
