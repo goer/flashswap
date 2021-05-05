@@ -1,5 +1,5 @@
-const {fs} = require("fs");
-const {glob} = require("glob");
+import fs from "fs";
+import glob from "glob";
 import { Signer, ContractFactory } from "ethers";
 import type { ContractData } from "./types";
 
