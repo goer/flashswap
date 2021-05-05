@@ -3,7 +3,7 @@
 pragma solidity ^0.6.0;
 
 import '@uniswap/v2-core/contracts/interfaces/IUniswapV2Callee.sol';
-import '@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol';
+import './interfaces/IUniswapV2Pair.sol';
 
 import './libraries/UniswapV2Library.sol';
 import './libraries/SafeMath.sol';
@@ -24,9 +24,11 @@ contract FlashSwap is IUniswapV2Callee {
     }
 
     function startFlashLoan(uint amountIn, address[] memory path, address baseToken) external {
+        // `path` must not include `baseToken` address
         require(path.length >= 3, "FlashSwap: Length of this path has to be at least 3");
         require(path[0] == path[path.length - 1], "FlashSwap: First and last tokens must be the same token");
 
+        // Save the path to use it in uniswapV2Call
         _path = path;
 
         address pair = UniswapV2Library.pairFor(_factory, path[0], baseToken);
@@ -35,6 +37,7 @@ contract FlashSwap is IUniswapV2Callee {
         uint amount0 = path[0] == token0 ? amountIn : 0;
         uint amount1 = path[0] == token0 ? 0 : amountIn;
 
+        // Make flashswap
         IUniswapV2Pair(pair).swap(
           amount0,
           amount1,
