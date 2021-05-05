@@ -12,12 +12,15 @@ chai.use(solidity);
 const { expect } = chai;
 const { formatEther, parseEther } = ethers.utils;
 
+// It is constants for default networks
+const UNISWAP_ROUTER: string = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
+const UNISWAP_FACTORY: string = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f";
+
 describe("FlashSwap", async () => {
   let accounts: SignerWithAddress[];
   let owner: SignerWithAddress;
 
   let TToken: ContractFactory;
-  let WETH9: ContractFactory;
   let FlashSwap: ContractFactory;
   let UniswapFactory: ContractFactory;
   let UniswapRouter: ContractFactory;
@@ -39,26 +42,29 @@ describe("FlashSwap", async () => {
     UniswapFactory = getContractFactory("IUniswapV2Factory", owner);
     UniswapRouter = getContractFactory("IUniswapV2Router02", owner);
     UniswapPair = getContractFactory("IUniswapV2Pair", owner);
-    WETH9 = getContractFactory("WETH9", owner);
   });
 
   beforeEach(async () => {
+    weth = await TToken.deploy("WETH", "WETH", 18);
     dai = await TToken.deploy("DAI", "DAI", 18);
     usdt = await TToken.deploy("USDT", "USDT", 18);
     btc = await TToken.deploy("BTC", "BTC", 18);
 
-    uniswapRouter = UniswapRouter.attach("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D");
-    uniswapFactory = UniswapFactory.attach(await uniswapRouter.factory());
+    uniswapRouter = UniswapRouter.attach(UNISWAP_ROUTER);
+    uniswapFactory = UniswapFactory.attach(UNISWAP_FACTORY);
 
+    await weth.deployed();
     await dai.deployed();
     await usdt.deployed();
     await btc.deployed();
 
-    await dai.mint(owner.address, parseEther("3000"));
+    await weth.mint(owner.address, parseEther("1000"));
+    await dai.mint(owner.address, parseEther("4000"));
     await usdt.mint(owner.address, parseEther("2500"));
     await btc.mint(owner.address, parseEther("2000"));
 
-    await dai.approve(uniswapRouter.address, parseEther("3000"));
+    await weth.approve(uniswapRouter.address, parseEther("1000"));
+    await dai.approve(uniswapRouter.address, parseEther("4000"));
     await usdt.approve(uniswapRouter.address, parseEther("2500"));
     await btc.approve(uniswapRouter.address, parseEther("2000"));
   });
@@ -66,11 +72,15 @@ describe("FlashSwap", async () => {
   it("start_flash_swap", async () => {
     const flashSwap: Contract = await FlashSwap.deploy(uniswapFactory.address, uniswapRouter.address);
     await flashSwap.deployed();
-    await uniswapRouter.addLiquidity(dai.address, usdt.address, parseEther("1000"), parseEther("1500"), 0, 0, owner.address, Date.now() + 60000);
-    await uniswapRouter.addLiquidity(dai.address, btc.address, parseEther("1000"), parseEther("1000"), 0, 0, owner.address, Date.now() + 60000);
-    await uniswapRouter.addLiquidity(btc.address, usdt.address, parseEther("1000"), parseEther("1000"), 0, 0, owner.address, Date.now() + 60000);
-    
+
+    await uniswapRouter.addLiquidity(dai.address, weth.address, parseEther("1000"), parseEther("1000"), 0, 0, owner.address, Date.now() + 60000); // 1/1
+
+    await uniswapRouter.addLiquidity(dai.address, usdt.address, parseEther("1000"), parseEther("1500"), 0, 0, owner.address, Date.now() + 60000); // 3/2
+    await uniswapRouter.addLiquidity(dai.address, btc.address, parseEther("1000"), parseEther("1000"), 0, 0, owner.address, Date.now() + 60000); // 1/1
+    const addTx: TransactionResponse = await uniswapRouter.addLiquidity(btc.address, usdt.address, parseEther("1000"), parseEther("1000"), 0, 0, owner.address, Date.now() + 60000); // 1/1
+    await addTx.wait();
+
     const path: string[] = [dai.address, usdt.address, btc.address, dai.address];
-    console.log(flashSwap.startFlashLoan(parseEther("1000"), 0, path));  
+    console.log(await flashSwap.startFlashLoan(parseEther("1000"), path, weth.address));
   });
 });
