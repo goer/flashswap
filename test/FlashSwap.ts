@@ -81,6 +81,6 @@ describe("FlashSwap", async () => {
     await addTx.wait();
 
     const path: string[] = [dai.address, usdt.address, btc.address, dai.address];
-    console.log(await flashSwap.startFlashLoan(parseEther("1000"), path, weth.address));
+    console.log(await flashSwap.startFlashLoan(parseEther("0.1"), path, weth.address));
   });
 });
