@@ -84,6 +84,8 @@ describe("Start Testing...(this might take a while)", async () => {
 
 
     // Add liquidity to different contracts in different ratios
+    const addTxLoan: TransactionResponse = await uniswapRouter.addLiquidity(btc.address, usdt.address, parseEther("1000"), parseEther("1000"), 0, 0, owner.address, Date.now() + 60000); // 1/1
+    await addTxLoan.wait();
     const addTxWeth: TransactionResponse = await uniswapRouter.addLiquidity(dai.address, weth.address, parseEther("1000"), parseEther("1000"), 0, 0, owner.address, Date.now() + 60000); // 1/1
     await addTxWeth.wait();
     const addTxUsdt: TransactionResponse = await uniswapRouter.addLiquidity(dai.address, usdt.address, parseEther("1000"), parseEther("1500"), 0, 0, owner.address, Date.now() + 60000); // 2/3
