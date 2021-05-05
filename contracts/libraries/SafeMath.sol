@@ -16,7 +16,7 @@ library SafeMath {
     }
 
     function div(uint x, uint y) internal pure returns (uint z) {
-        require(b > 0, "SafeMath: division by zero");
-        z = a / b;
+        require(x > 0, "SafeMath: division by zero");
+        z = x / y;
     }
 }
