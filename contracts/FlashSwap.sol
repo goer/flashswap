@@ -6,11 +6,14 @@ import '@uniswap/v2-core/contracts/interfaces/IUniswapV2Callee.sol';
 import '@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol';
 
 import './libraries/UniswapV2Library.sol';
+import './libraries/SafeMath.sol';
 import './interfaces/IUniswapV2Factory.sol';
 import './interfaces/IUniswapV2Router02.sol';
 import './interfaces/IERC20.sol';
 
 contract FlashSwap is IUniswapV2Callee {
+    using SafeMath for uint;
+
     address private immutable _factory;
     address private immutable _router;
     address[] private _path;
@@ -20,14 +23,17 @@ contract FlashSwap is IUniswapV2Callee {
         _router = router;
     }
 
-    function startFlashLoan(uint amount0, uint amount1, address[] memory path) external {
-        require(path.length >= 3, "FlashSwap: length of path has to be at least 3");
+    function startFlashLoan(uint amountIn, address[] memory path, address baseToken) external {
+        require(path.length >= 3, "FlashSwap: Length of this path has to be at least 3");
+        require(path[0] == path[path.length - 1], "FlashSwap: First and last tokens must be the same token");
 
         _path = path;
-        address pair = IUniswapV2Factory(_factory).getPair(path[0], path[1]);
 
-        // address token0 = IUniswapV2Pair(pair).token0();
-        // require(token0 == path[0] && token0 == path[path.length - 1], "First and last tokens must be the same token0 of the first pair");
+        address pair = UniswapV2Library.pairFor(_factory, path[0], baseToken);
+        address token0 = IUniswapV2Pair(pair).token0();
+
+        uint amount0 = path[0] == token0 ? amountIn : 0;
+        uint amount1 = path[0] == token0 ? 0 : amountIn;
 
         IUniswapV2Pair(pair).swap(
           amount0,
@@ -35,33 +41,38 @@ contract FlashSwap is IUniswapV2Callee {
           address(this),
           bytes("any") // random `data` to trigger flash-swap
         );
+        // Send all profit to this sender
+        IERC20(path[0]).transfer(msg.sender, IERC20(path[0]).balanceOf(address(this)));
     }
 
     function uniswapV2Call(address sender, uint amount0, uint amount1, bytes calldata data) external override {
+        address rootToken;
+        uint amounIn;
+        {
         address token0 = IUniswapV2Pair(msg.sender).token0();
         address token1 = IUniswapV2Pair(msg.sender).token1();
         // Necassary to check that this msg.sender is a pair
-        assert(msg.sender == UniswapV2Library.pairFor(_factory, token0, token1));
-        assert(amount0 == 0 || amount1 == 0); // this strategy is unidirectional
-        address rootToken = amount0 == 0 ? token1 : token0;
-        uint amount = amount0 == 0 ? amount1 : amount0;
-
-        IERC20(rootToken).approve(_router, amount);
+        require(msg.sender == UniswapV2Library.pairFor(_factory, token0, token1), "FlashSwap: msg.sender is not a pair");
+        // One of the amounts has to equal 0 because we need only one token to make a flashswap 
+        // UniswapPair already checks that at least one greather than 0
+        require(amount0 == 0 || amount1 == 0, "FlashSwap: Amount one of the tokens doesn't equal 0");
+        // Use token1 and amount1 if amount0 == 0 else use token0 and amount0
+        rootToken = amount0 == 0 ? token1 : token0;
+        amounIn = amount0 == 0 ? amount1 : amount0;
+        }
+        IERC20(rootToken).approve(_router, amounIn);
         IUniswapV2Router02(_router).swapExactTokensForTokens(
-            amount,
-            amount, // Amount that will return back has to be greater than start amount
+            amounIn,
+            amounIn, // Amount that will return back has to be greater than start amount
             _path,
             address(this),
             now + 10 minutes
         );
+        // Calculate amountOut that will return to this pair.
+        // amountOut = amounIn / 0.997 (+ 10 to avoid error)
+        uint amountOut = amounIn.mul(1000).div(997).add(10);
 
-        (uint112 reserve0, uint112 reserve1,) = IUniswapV2Pair(msg.sender).getReserves();
-        uint amountIn = UniswapV2Library.getAmountIn(amount, reserve0, reserve1);
-        // uint256[] memory amountIn = UniswapV2Library.getAmountsIn(_factory, amount, _path);
-
-        //amountIn[0] is it right index?
-        IERC20(rootToken).transfer(msg.sender, amountIn);
-        // Send all profit to a sender
-        IERC20(rootToken).transfer(sender, IERC20(rootToken).balanceOf(address(this)));
+        // Return tokens with fee back
+        IERC20(rootToken).transfer(msg.sender, amountOut);
     }
 }
