@@ -3,8 +3,8 @@
 pragma solidity ^0.6.0;
 
 import '@uniswap/v2-core/contracts/interfaces/IUniswapV2Callee.sol';
-import './interfaces/IUniswapV2Pair.sol';
 
+import './interfaces/IUniswapV2Pair.sol';
 import './libraries/UniswapV2Library.sol';
 import './libraries/SafeMath.sol';
 import './interfaces/IUniswapV2Factory.sol';
@@ -23,7 +23,7 @@ contract FlashSwap is IUniswapV2Callee {
         _router = router;
     }
 
-    function startFlashLoan(uint amountIn, address[] memory path, address baseToken) external {
+    function startFlashLoan(uint amountIn, address[] calldata path, address baseToken) external {
         // `path` must not include `baseToken` address
         require(path.length >= 3, "FlashSwap: Length of this path has to be at least 3");
         require(path[0] == path[path.length - 1], "FlashSwap: First and last tokens must be the same token");
@@ -72,8 +72,8 @@ contract FlashSwap is IUniswapV2Callee {
             now + 10 minutes
         );
         // Calculate amountOut that will return to this pair.
-        // amountOut = amounIn / 0.997 (+ 10 to avoid error)
-        uint amountOut = amounIn.mul(1000).div(997).add(10);
+        // amountOut = amounIn / 0.997 (+ 1 to avoid error)
+        uint amountOut = amounIn.mul(1000).div(997).add(1);
 
         // Return tokens with fee back
         IERC20(rootToken).transfer(msg.sender, amountOut);
