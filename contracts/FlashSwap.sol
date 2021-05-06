@@ -2,48 +2,26 @@
 
 pragma solidity ^0.6.6;
 
+import '@uniswap/v2-core/contracts/interfaces/IUniswapV2Callee.sol';
 
-// All local imports 
+import './interfaces/IUniswapV2Pair.sol';
+import './libraries/UniswapV2Library.sol';
 import './libraries/SafeMath.sol';
 import './interfaces/IUniswapV2Factory.sol';
 import './interfaces/IUniswapV2Router02.sol';
 import './interfaces/IUniswapV2Pair.sol';
 import './interfaces/IERC20.sol';
-import './interfaces/IUniswapV2Callee.sol';
-import './libraries/UniswapV2Library.sol';
-
-
-/*
-
-THE IDEA:
-
-There are three tokens: A, B, C
-Let's say that the current ratio between them is 1:10:100
-We swap 1A -> 10B
-After that for some reason (that we have no control of) the ratio between B and C changes to 9:100 (for example)
-We swap 10B -> 110C(!!!)
-We swap 110C -> 1.1A
-0.1A returns to us as a profit
-1A goes back to the pool
-
-*/
-
 
 contract FlashSwap is IUniswapV2Callee {
     using SafeMath for uint;
 
-    address private  _factory;
-    address private  _router;
-    address private  token0;
-    address private  token1;
-    address private  _factoryAddr;
-    address private  _routerAddr;
-    address private  pair;
-    address[] private  _path;
+    address private immutable _factory;
+    address private immutable _router;
+    address[] private _path;
 
-    constructor(address factoryAddr, address routerAddr) public {
-        _factoryAddr = factoryAddr;
-        _routerAddr = routerAddr;
+    constructor(address factory, address router) public {
+        _factory = factory;
+        _router = router;
     }
 
     function startFlashLoan(uint amountIn, address[] calldata path, address baseToken) external {
@@ -71,9 +49,6 @@ contract FlashSwap is IUniswapV2Callee {
         IERC20(path[0]).transfer(msg.sender, IERC20(path[0]).balanceOf(address(this)));
     }
 
-    // sender = msg.sender
-    // amount0 = amountIn
-    // amount1 = amountOut
     function uniswapV2Call(address sender, uint amount0, uint amount1, bytes calldata data) external override {
         address rootToken;
         uint amounIn;
@@ -98,8 +73,8 @@ contract FlashSwap is IUniswapV2Callee {
             now + 10 minutes
         );
         // Calculate amountOut that will return to this pair.
-        // amountOut = amounIn / 0.997 (+ 10 to avoid error)
-        uint amountOut = amounIn.mul(1000).div(997).add(10);
+        // amountOut = amounIn / 0.997 (+ 1 to avoid error)
+        uint amountOut = amounIn.mul(1000).div(997).add(1);
 
         // Return tokens with fee back
         IERC20(rootToken).transfer(msg.sender, amountOut);
